@@ -40,7 +40,7 @@ def run(player_id: int, server: socket, active_terminal: Terminal):
         elif(wrong == 3):
             ss.overwrite(c.RESET + c.RED + "\rWager has to be an integer greater than 0. Type in the name of the game followed by the wager. (ex. 'coin_flip 100')")
         elif(wrong == 4):
-            ss.overwrite(c.RESET + c.RED + "\Not enough funds to cover wager.")
+            ss.overwrite(c.RESET + c.RED + "\rNot enough funds to cover wager.")
 
         game = input(f"\r").lower().split(" ")
         ss.overwrite(c.RESET+"\r" + " " * 40)
