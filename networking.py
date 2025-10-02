@@ -68,7 +68,7 @@ def send_notif(other: socket.socket, text: str, header: str="NOTF:") -> None:
     # Close the new socket
     new_socket.close()
 
-def receive_message(other: socket.socket) -> str:
+def receive_message(client_socket: socket) -> str | None:
     """
     Receives a message from a client socket.
     
@@ -76,21 +76,29 @@ def receive_message(other: socket.socket) -> str:
         client (socket.socket) The client socket to receive the message from.
     
     Returns:
-        str representing the message received.
+        str representing the message received or None if nothing is received.
     """
-    full_msg = bytearray(b'')
-    new_msg = True
-    while True:
-        msg = other.recv(16)
-        if new_msg:
+    try:
+        msg = client_socket.recv(HEADERSIZE)
+        if not len(msg):
+            return None
+
+        # --- This is the new error handling block ---
+        try:
             msglen = int(msg[:HEADERSIZE])
-            new_msg = False
+        except (ValueError, TypeError):
+            # This triggers if the message is not a valid number (e.g., an HTTP request)
+            print(f"DEBUG: Received invalid header from a client: {msg}")
+            return None # Signal that the handshake failed
+        # --- End of new block ---
 
-        full_msg.extend(msg)
+        full_msg = client_socket.recv(msglen)
+        return full_msg.decode("utf-8")
 
-        if len(full_msg) == msglen:
-            return full_msg[HEADERSIZE:].decode("utf-8").strip()
-        
+    except Exception as e:
+        print(f"An error occurred in receive_message: {e}")
+        return None
+
 def set_oof_params(player_id: int, server: socket.socket, **kwargs) -> dict:
     """
     Sets the parameters for the out of focus function.

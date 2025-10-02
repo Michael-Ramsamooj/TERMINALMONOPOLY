@@ -39,7 +39,9 @@ def run(player_id: int, server: socket, active_terminal: Terminal):
             ss.overwrite(c.RESET + c.RED + "\rInvalid input. Type in the name of the game followed by the wager. (ex. 'coin_flip 100')")
         elif(wrong == 3):
             ss.overwrite(c.RESET + c.RED + "\rWager has to be an integer greater than 0. Type in the name of the game followed by the wager. (ex. 'coin_flip 100')")
-        
+        elif(wrong == 4):
+            ss.overwrite(c.RESET + c.RED + "\rNot enough funds to cover wager.")
+
         game = input(f"\r").lower().split(" ")
         ss.overwrite(c.RESET+"\r" + " " * 40)
         if active_terminal.status != "ACTIVE":
@@ -64,9 +66,19 @@ def run(player_id: int, server: socket, active_terminal: Terminal):
                 i = __import__('casino_games.' + game[0], fromlist=[''])
 
                 wager = int(game[1])
-                if(wager == 0): continue
+                if(wager <= 0):
+                    wrong = 3
+                    continue
 
                 net.send_message(server, f"{player_id}casino lose {wager}")
+                new_balance = int(net.receive_message(server))
+
+                # Acknowledge debt
+                if new_balance == balance:
+                    wrong = 4 
+                    continue
+
+
                 balance = int(net.receive_message(server))
                 ss.overwrite(c.RESET+"\r" + " " * 40)
                 active_terminal.busy(server, player_id)
@@ -126,9 +138,19 @@ def handle(cmds: str, client_socket, change_balance, add_to_output_area, id, nam
     command_data = cmds.split(' ')
     delta = 1 if command_data[1] == 'win' else -1
     amount = int(command_data[2])
-    money = change_balance(id, delta * amount)
-    add_to_output_area("Casino", f"Updated {name}'s balance by {delta * amount}. New balance: {money}")
-    net.send_message(client_socket, str(money))
+    new_balance = change_balance(id, delta * amount)
+
+    if new_balance is None:
+        # The banker rejected the transaction. Get the current balance to send back.
+        current_balance = change_balance(id, 0)
+        add_to_output_area("Casino", f"Insufficient funds for wager of ${amount} from {name}.")
+        net.send_message(client_socket, str(current_balance))
+    else:
+        # The transaction was successful.
+        verb = "gained" if delta > 0 else "lost"
+        add_to_output_area("Casino", f"{name} {verb} ${amount}. New balance: ${new_balance}")
+        net.send_message(client_socket, str(new_balance))
+
 
 
 if __name__ == "__main__":

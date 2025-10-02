@@ -52,6 +52,7 @@ loading = False
 animation_thread.join()
 
 STARTING_CASH = 1500
+ALLOW_OVERDRAFT = False
 clients = []
 server_socket = None
 port = 3131
@@ -314,20 +315,28 @@ def set_unittest() -> None:
         print("Skipping unit tests." if ss.VERBOSE else "")
         return
 
-def change_balance(id: int, delta: int) -> int: 
+def change_balance(id: int, delta: int) -> int | None: 
     """
     Adjusts the balance of a specific player by a given amount.
 
     This function updates the money attribute of the player identified by their ID.
-    A positive delta increases the player's balance, while a negative delta decreases it.
+    A positive delta increases the player's balance, while a negative delta decreases it. It prevents
+    a player's balance from dropping below zero unless ALLOW_OVERDRAFT is enabled.
 
     Args:
         id (int): The unique identifier of the player whose balance needs to be adjusted.
         delta (int): The amount to add or subtract from the player's balance.
 
     Returns:
-        None
+        int: The player's new balance if the transaction was successful.
+        None: If the transaction failed due to insufficient funds.
     """
+
+    if delta < 0:
+        # Check if the player can afford the withdrawal
+        if (clients[id].PlayerObject.cash + delta < 0) and not ALLOW_OVERDRAFT:
+            return None
+    
     clients[id].PlayerObject.cash += delta
     return clients[id].PlayerObject.cash
 
@@ -544,15 +553,28 @@ def handshake(client_socket: socket.socket, handshakes: list) -> None:
     global clients
     # Attempt handshake
     net.send_message(client_socket, "Welcome to the game!")
+    
+    # Receive the client's response
     message = net.receive_message(client_socket)
+
+    # If the message is None, the client sent invalid data or disconnected.
+    if message is None:
+        print("A non-game client tried to connect. Connection rejected.")
+        client_socket.close()
+        return
+
     if message.startswith("Connected!"):
+        # This part only runs if the handshake was valid
         handshakes[len(clients)-1] = True
         name = message.split(',')[1]
         
-        clients.append(Client(client_socket, None, name, inv.Inventory())) # Append the client to the list of clients with a temporary id of None
+        clients.append(Client(client_socket, None, name, inv.Inventory()))
 
     else: 
+        # Handle cases where a client sends something, but it's not the right format
+        print(f"Received an unexpected handshake message: {message}. Connection closed.")
         handshakes[len(clients)-1] = False
+        client_socket.close()
 
 def get_client_by_socket(socket: socket.socket) -> Client:
     """
@@ -757,7 +779,11 @@ if __name__ == "__main__":
 
     if "-silent" in sys.argv:
         ss.VERBOSE = False
-
+    
+    if "-allow-overdraft" in sys.argv:
+            ALLOW_OVERDRAFT = True
+            print("Player overdrafts are enabled.")
+    
     set_unittest() 
     # set_gamerules()
     start_server()
